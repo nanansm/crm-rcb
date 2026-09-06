@@ -1,0 +1,12 @@
+name = "crm-rcb"
+pages_build_output_dir = "dist"
+compatibility_date = "2025-01-01"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "crm-rcb"
+database_id = "6fb6ef2a-0b5f-4133-b11d-de15681bb19f"
+
+[[kv_namespaces]]
+binding = "CRM_STATE"
+id = "e003668b17b0443da93392ef5fed0207"

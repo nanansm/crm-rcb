@@ -1,0 +1,89 @@
+@import "tailwindcss";
+
+/* Font brand Rancabango — self-hosted, sama dengan rancabangohotel.com */
+@font-face {
+  font-family: "Public Sans";
+  src: url("/fonts/PublicSans.woff2") format("woff2");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* Token disalin dari rancabangohotel/src/styles/global.css.
+   Zing Script sengaja tidak dibawa: aksen puitis, bukan bahasa alat kerja. */
+@theme {
+  --font-sans: "Public Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Public Sans", ui-sans-serif, system-ui, sans-serif;
+
+  --color-canvas: oklch(0.987 0.004 150);
+  --color-canvas-2: oklch(0.962 0.008 152);
+  --color-mist: oklch(0.94 0.012 156);
+
+  --color-pine: oklch(0.28 0.026 160);
+  --color-pine-deep: oklch(0.205 0.022 160);
+
+  --color-teal: #327289;
+  --color-teal-deep: #234f5e;
+  --color-teal-bright: #3d88a3;
+
+  --color-gold: oklch(0.80 0.128 80);
+  --color-gold-deep: oklch(0.72 0.13 74);
+
+  --color-ink: oklch(0.28 0.022 162);
+  --color-ink-soft: oklch(0.44 0.018 162);
+  --color-line: oklch(0.88 0.012 150);
+
+  /* khusus alat kerja: status yang harus kebaca sekilas */
+  --color-ok: oklch(0.62 0.13 155);
+  --color-warn: oklch(0.72 0.14 70);
+  --color-bad: oklch(0.58 0.18 27);
+}
+
+html { -webkit-text-size-adjust: 100%; }
+
+body {
+  font-family: var(--font-sans);
+  background: #fff;
+  color: var(--color-ink);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+.font-display {
+  font-weight: 800;
+  letter-spacing: -0.018em;
+  text-wrap: balance;
+}
+
+/* Kartu dan tombol: sudut membulat, garis tipis, tanpa bayangan tebal —
+   mengikuti rancabangohotel.com. */
+.kartu {
+  background: #fff;
+  border: 1px solid var(--color-line);
+  border-radius: 1rem;
+}
+
+.tombol {
+  border-radius: 9999px;
+  font-weight: 600;
+  padding: 0.55rem 1.15rem;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+.tombol-utama { background: var(--color-teal); color: #fff; }
+.tombol-utama:hover { background: var(--color-teal-deep); }
+.tombol-utama:disabled { background: var(--color-mist); color: var(--color-ink-soft); cursor: not-allowed; }
+.tombol-garis { border: 1px solid var(--color-line); color: var(--color-ink); background: #fff; }
+.tombol-garis:hover { border-color: var(--color-teal); color: var(--color-teal-deep); }
+
+.kolom-isian {
+  width: 100%;
+  border: 1px solid var(--color-line);
+  border-radius: 0.75rem;
+  padding: 0.6rem 0.85rem;
+  background: #fff;
+}
+.kolom-isian:focus {
+  outline: none;
+  border-color: var(--color-teal);
+  box-shadow: 0 0 0 3px color-mix(in oklch, var(--color-teal) 18%, transparent);
+}
