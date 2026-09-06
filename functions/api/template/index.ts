@@ -1,6 +1,13 @@
 import { guard, json, type Env } from '../../_lib/auth'
-
-const VERSI = 'v21.0'
+import {
+  VERSI_GRAPH as VERSI,
+  ambilDaftarTemplateMeta,
+  punyaVariabel,
+  samarkanAngka,
+  type KomponenMeta,
+  type RespMetaGagal,
+  type TemplateMeta,
+} from '../../_lib/template-meta'
 
 const PANJANG_JUDUL_MIN = 3
 const PANJANG_JUDUL_MAKS = 60
@@ -9,42 +16,6 @@ const PANJANG_ISI_MIN = 30
 const PANJANG_ISI_MAKS = 1024
 const PANJANG_FOOTER_MAKS = 60
 const PANJANG_TOMBOL_MAKS = 25
-
-/** Pesan galat Meta kadang menyertakan angka panjang (ID, kode akun). Disamarkan
- * sebelum tampil ke layar staf atau tersimpan di log. */
-function samarkanAngka(pesan: string): string {
-  return pesan.replace(/\d{8,}/g, '(angka)')
-}
-
-interface TombolMetaKomponen {
-  type?: string
-  text?: string
-  url?: string
-}
-
-interface KomponenMeta {
-  type?: string
-  format?: string
-  text?: string
-  buttons?: TombolMetaKomponen[]
-}
-
-interface TemplateMeta {
-  id?: string
-  name?: string
-  status?: string
-  category?: string
-  language?: string
-  components?: KomponenMeta[]
-}
-
-interface RespMetaTemplates {
-  data?: TemplateMeta[]
-}
-
-interface RespMetaGagal {
-  error?: { message?: string; code?: number }
-}
 
 interface RingkasanTemplate {
   id: string
@@ -63,6 +34,9 @@ interface RingkasanTemplate {
   // gambar. Layar broadcast perlu tahu ini supaya bisa mewajibkan gambarnya,
   // bukan membiarkan staf menembak lalu gagal seluruhnya.
   punya_gambar: boolean
+  // Template ber-`{{1}}` gagal 100% di jalur broadcast ini: parameter isian
+  // tidak pernah dikirim. Ditandai supaya layar Kirim Pesan tidak menawarkannya.
+  punya_variabel: boolean
 }
 
 interface BarisPromoMeta {
@@ -100,6 +74,7 @@ function ringkas(t: TemplateMeta, meta: Map<string, BarisPromoMeta>): RingkasanT
         }
       : null,
     punya_gambar: (header?.format ?? '').toUpperCase() === 'IMAGE',
+    punya_variabel: punyaVariabel(t),
   }
 }
 
@@ -116,45 +91,6 @@ async function ambilPromoMeta(env: Env): Promise<Map<string, BarisPromoMeta>> {
     // tetap disajikan tanpa judul, itu jauh lebih baik daripada layar kosong.
   }
   return peta
-}
-
-type HasilDaftar =
-  | { ok: true; data: TemplateMeta[] }
-  | { ok: false; pesan: string; status: number }
-
-/** Satu-satunya tempat daftar template ditarik dari Graph API. */
-async function ambilDaftarTemplateMeta(env: Env): Promise<HasilDaftar> {
-  let res: Response
-  try {
-    res = await fetch(
-      `https://graph.facebook.com/${VERSI}/${env.META_WABA_ID}/message_templates?fields=id,name,status,category,language,components&limit=200`,
-      {
-        headers: { Authorization: `Bearer ${env.META_TOKEN as string}` },
-        signal: AbortSignal.timeout(10_000),
-      },
-    )
-  } catch {
-    return { ok: false, pesan: 'gagal_menghubungi_meta', status: 502 }
-  }
-
-  const teks = await res.text()
-  let terurai: unknown = null
-  try {
-    terurai = teks ? JSON.parse(teks) : null
-  } catch {
-    // biarkan null -- ditangani lewat status HTTP di bawah
-  }
-
-  if (!res.ok) {
-    const err = (terurai as RespMetaGagal | null)?.error
-    return {
-      ok: false,
-      pesan: err?.message ? samarkanAngka(err.message) : 'meta_menolak_permintaan',
-      status: 502,
-    }
-  }
-
-  return { ok: true, data: (terurai as RespMetaTemplates | null)?.data ?? [] }
 }
 
 /**
@@ -177,10 +113,17 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
   if (!daftar.ok) return json({ error: daftar.pesan }, { status: daftar.status })
 
   const meta = await ambilPromoMeta(env)
-  const template = daftar.data.filter((t) => t.status === 'APPROVED').map((t) => ringkas(t, meta))
+  const disetujui = daftar.data.filter((t) => t.status === 'APPROVED').map((t) => ringkas(t, meta))
   const menunggu = daftar.data.filter((t) => t.status !== 'APPROVED').map((t) => ringkas(t, meta))
 
-  return json({ template, menunggu })
+  // Sudah disetujui Meta tapi tetap tidak bisa dipakai dari sini: template
+  // ber-variabel butuh parameter isian per nomor, dan broadcast massal ini tidak
+  // punya isian itu. Dipisah -- bukan disembunyikan -- supaya staf yang membuatnya
+  // di WhatsApp Manager tahu kenapa template itu tidak muncul di daftar kirim.
+  const template = disetujui.filter((t) => !t.punya_variabel)
+  const tak_didukung = disetujui.filter((t) => t.punya_variabel)
+
+  return json({ template, menunggu, tak_didukung })
 }
 
 const BATAS_GAMBAR_BYTE = 5 * 1024 * 1024

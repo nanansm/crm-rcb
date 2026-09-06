@@ -116,20 +116,14 @@ export default function Inbox() {
     return () => clearInterval(t)
   }, [dipilih, sibuk])
 
+  // Dipakai untuk baris penanda di atas daftar. Sengaja dihitung dari `daftar`
+  // yang sudah tersaring kotak cari: baris ini menerangkan daftar yang terlihat.
   const jumlahMenunggu = daftar.filter((p) => p.menunggu_dibalas).length
 
-  const judulAwal = useRef(typeof document === 'undefined' ? '' : document.title)
-
-  useEffect(() => {
-    document.title =
-      jumlahMenunggu > 0 ? `(${jumlahMenunggu}) Inbox — CRM Rancabango` : 'Inbox — CRM Rancabango'
-    const semula = judulAwal.current
-    // Staf pindah ke halaman lain: judul tab harus kembali seperti semula,
-    // bukan tetap tertulis "Inbox" di halaman Kontak.
-    return () => {
-      document.title = semula
-    }
-  }, [jumlahMenunggu])
+  // Badge judul tab TIDAK ditulis dari sini. Dulu iya, dan akibatnya dua: badge
+  // hilang begitu staf pindah halaman (komponen ini dibongkar), dan angkanya ikut
+  // menyusut saat staf mengetik di kotak cari karena `daftar` sudah tersaring.
+  // Sekarang ditulis di App.tsx dari angka utuh -- lihat `src/App.tsx`.
 
   const nomorTerakhirDigulir = useRef<string | null>(null)
   const jumlahPesan = detail?.pesan.length ?? 0

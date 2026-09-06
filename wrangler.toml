@@ -10,3 +10,10 @@ database_id = "6fb6ef2a-0b5f-4133-b11d-de15681bb19f"
 [[kv_namespaces]]
 binding = "CRM_STATE"
 id = "e003668b17b0443da93392ef5fed0207"
+
+# Gambar promo yang diunggah staf. Domainnya publik (media.rancabangohotel.com)
+# karena Meta yang mengambil gambarnya sendiri saat template dikirim -- URL
+# bertanda tangan sementara tidak bisa dipakai di jalur itu.
+[[r2_buckets]]
+binding = "MEDIA"
+bucket_name = "crm-rcb-media"

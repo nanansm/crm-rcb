@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import Pilih from '../komponen/Pilih'
 import GelembungWa, { type TombolPratinjau } from '../komponen/GelembungWa'
+import UnggahGambar from '../komponen/UnggahGambar'
 
 type Tombol = { tipe: 'situs' | 'balasan'; teks: string; url: string }
 
@@ -159,6 +160,7 @@ function KartuTemplate({ t }: { t: Template }) {
 export default function TemplatePage() {
   const [siap, setSiap] = useState<Template[]>([])
   const [menunggu, setMenunggu] = useState<Template[]>([])
+  const [takDidukung, setTakDidukung] = useState<Template[]>([])
   const [metaSiap, setMetaSiap] = useState(true)
   const [form, setForm] = useState<Isian>(ISIAN_KOSONG)
   const [gambarRusak, setGambarRusak] = useState(false)
@@ -174,10 +176,12 @@ export default function TemplatePage() {
         (d: {
           template?: Template[]
           menunggu?: Template[]
+          tak_didukung?: Template[]
           meta_belum_dikonfigurasi?: boolean
         }) => {
           setSiap(d.template ?? [])
           setMenunggu(d.menunggu ?? [])
+          setTakDidukung(d.tak_didukung ?? [])
           setMetaSiap(!d.meta_belum_dikonfigurasi)
         },
       )
@@ -248,7 +252,7 @@ export default function TemplatePage() {
   return (
     <div className="space-y-4">
       <div>
-        <h1 className="font-display text-2xl text-ink">Template</h1>
+        <h1 className="font-display text-2xl text-ink">Templat Pesan</h1>
         <p className="text-sm text-ink-soft">
           Template langsung diajukan ke WhatsApp begitu tombolnya ditekan dan tidak bisa ditarik
           kembali. Baca ulang tulisannya di pratinjau sebelum mengirim.
@@ -445,24 +449,14 @@ export default function TemplatePage() {
             </div>
 
             <div className="space-y-1.5">
-              <label htmlFor="gambarUrl" className="text-sm font-medium text-ink">
-                Gambar header (boleh kosong)
-              </label>
-              <input
-                id="gambarUrl"
-                type="url"
-                value={form.gambarUrl}
-                onChange={(e) => {
+              <UnggahGambar
+                nilai={form.gambarUrl}
+                onUbah={(url) => {
                   // Alamat baru: gambar lama belum tentu masih rusak, coba muat lagi.
-                  ubah('gambarUrl', e.target.value)
+                  ubah('gambarUrl', url)
                   setGambarRusak(false)
                 }}
-                placeholder="https://…/promo.jpg"
-                className="kolom-isian"
               />
-              <p className="text-xs text-ink-soft">
-                Wajib https, jpg atau png, di bawah 5 MB, dan bisa dibuka publik.
-              </p>
               {gambarRusak ? (
                 <p className="text-xs text-bad">Gambar tidak bisa dibuka dari alamat itu.</p>
               ) : null}
@@ -527,6 +521,21 @@ export default function TemplatePage() {
               ))}
             </ul>
           )}
+
+          {takDidukung.length > 0 ? (
+            <div className="mt-4 border-t border-line pt-3">
+              <p className="text-sm font-medium text-ink">Disetujui tapi pakai isian berubah</p>
+              <p className="mt-0.5 text-xs text-ink-soft">
+                Isinya memuat {'{{1}}'} yang harus diisi per orang. Kirim Pesan mengirim satu isi yang
+                sama ke semua tamu, jadi template ini tidak bisa dipakai dari sini.
+              </p>
+              <ul className="mt-2 space-y-2">
+                {takDidukung.map((t) => (
+                  <KartuTemplate key={t.nama} t={t} />
+                ))}
+              </ul>
+            </div>
+          ) : null}
         </div>
       </div>
     </div>

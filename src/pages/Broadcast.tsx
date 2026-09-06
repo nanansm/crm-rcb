@@ -1,10 +1,13 @@
 import { useEffect, useState } from 'react'
+import type { DaftarRingkas } from '../komponen/ImporDaftar'
 import Pilih from '../komponen/Pilih'
 import PilihTag from '../komponen/PilihTag'
+import TahanKirim from '../komponen/TahanKirim'
+import UnggahGambar from '../komponen/UnggahGambar'
 
 type Tag = { id: number; nama: string; jumlah_kontak: number }
 
-type Template = { nama: string; bahasa: string; isi: string; punya_gambar?: boolean }
+type Template = { nama: string; judul?: string; bahasa: string; isi: string; punya_gambar?: boolean }
 
 type Progress = {
   status: string
@@ -16,6 +19,8 @@ type Progress = {
 }
 
 type Hitung = {
+  uji?: boolean
+  nomor_uji?: string | null
   total_cocok: number
   akan_dikirim: number
   sisa_kuota: number
@@ -41,10 +46,53 @@ type Campaign = {
 const TARIF_MARKETING = 586
 
 const LABEL_LANGKAH: Record<1 | 2 | 3, string> = {
-  1: 'Isi pesan',
-  2: 'Pilih penerima',
+  1: 'Pilih templat',
+  2: 'Pilih daftar & jumlah',
   3: 'Periksa & kirim',
 }
+
+/**
+ * Kode galat server diterjemahkan ke kalimat yang bisa ditindaklanjuti staf.
+ * Kode mentah di layar bikin mereka menelepon Moté untuk hal yang sebenarnya
+ * bisa mereka benahi sendiri dalam satu menit.
+ */
+const PESAN_GALAT: Record<string, string> = {
+  masih_ada_yang_jalan: 'Masih ada broadcast yang berjalan. Tunggu selesai atau hentikan dulu.',
+  target_kosong: 'Tidak ada penerima yang layak dikirimi setelah penyaringan.',
+  nomor_uji_belum_diatur:
+    'Nomor uji belum dipasang di pengaturan server, jadi mode uji tidak bisa dipakai.',
+  template_tidak_ditemukan:
+    'Templat ini sudah tidak ada di WhatsApp. Muat ulang halaman lalu pilih templat lain.',
+  template_belum_disetujui:
+    'Templat ini sedang tidak disetujui WhatsApp, jadi semua pesannya akan ditolak. Pilih templat lain.',
+  template_pakai_variabel:
+    'Templat ini memakai isian yang berubah per orang. Kirim Pesan hanya bisa mengirim satu isi yang sama ke semua tamu.',
+  template_wajib_gambar: 'Templat ini berkepala gambar, jadi gambarnya wajib diisi dulu.',
+  template_tidak_pakai_gambar:
+    'Templat ini tidak berkepala gambar, jadi gambar yang dipasang tidak akan terkirim. Hapus dulu gambarnya.',
+  gambar_url_wajib_https: 'Alamat gambar harus diawali https.',
+  gambar_url_tidak_valid: 'Alamat gambar tidak terbaca.',
+  gagal_menghubungi_meta: 'WhatsApp sedang tidak bisa dihubungi. Coba lagi sebentar lagi.',
+  gagal_menghubungi_n8n: 'Mesin pengirim sedang tidak bisa dihubungi. Coba lagi sebentar lagi.',
+  n8n_belum_dikonfigurasi: 'Mesin pengirim belum dipasang di lingkungan ini.',
+}
+
+const rupiah = (n: number) => 'Rp ' + n.toLocaleString('id-ID')
+const angka = (n: number) => n.toLocaleString('id-ID')
+
+/**
+ * `maks` yang dikirim ke server. -1 = mode uji (satu pesan ke nomor tim),
+ * 0 = seluruh tamu yang lolos saring. Angka lain = batas atas jumlah tamu.
+ */
+type Preset = { maks: number; label: string; keterangan: string }
+
+const PRESET: Preset[] = [
+  { maks: -1, label: 'Uji dulu', keterangan: '1 pesan ke nomor tim, tidak ada tamu yang menerima' },
+  { maks: 25, label: '25 tamu', keterangan: 'Kirim ke 25 tamu pertama yang lolos saring' },
+  { maks: 200, label: '200 tamu', keterangan: 'Kirim ke 200 tamu pertama yang lolos saring' },
+  { maks: 1000, label: '1.000 tamu', keterangan: 'Kirim ke 1.000 tamu pertama yang lolos saring' },
+  { maks: 0, label: 'Semua tamu', keterangan: 'Kirim ke seluruh tamu yang lolos saring' },
+]
 
 export default function Broadcast() {
   const [langkah, setLangkah] = useState<1 | 2 | 3>(1)
@@ -52,7 +100,11 @@ export default function Broadcast() {
   const [template, setTemplate] = useState<Template[]>([])
   const [metaSiap, setMetaSiap] = useState(true)
   const [pilihTag, setPilihTag] = useState<number[]>([])
-  const [semuaKontak, setSemuaKontak] = useState(false)
+  const [daftarTamu, setDaftarTamu] = useState<DaftarRingkas[]>([])
+  const [pilihDaftar, setPilihDaftar] = useState('') // '' = semua tamu
+  const [preset, setPreset] = useState<Preset | null>(null)
+  const [menghitung, setMenghitung] = useState(false)
+  const [galatHitung, setGalatHitung] = useState('')
   const [pilihTemplate, setPilihTemplate] = useState('')
   const [gambarUrl, setGambarUrl] = useState('')
   const [gambarRusak, setGambarRusak] = useState(false)
@@ -61,7 +113,6 @@ export default function Broadcast() {
   const [pesan, setPesan] = useState('')
   const [sibuk, setSibuk] = useState(false)
   const [versi, setVersi] = useState(0)
-  const [angkaKonfirmasi, setAngkaKonfirmasi] = useState('')
   const [progress, setProgress] = useState<Progress | null>(null)
   const [hentikanKonfirm, setHentikanKonfirm] = useState(false)
 
@@ -77,6 +128,12 @@ export default function Broadcast() {
         setMetaSiap(!d.meta_belum_dikonfigurasi)
       })
       .catch(() => setTemplate([]))
+    fetch('/api/daftar')
+      .then((r) => r.json())
+      .then((d: { daftar: DaftarRingkas[] }) => setDaftarTamu(d.daftar))
+      // Daftar gagal dimuat diperlakukan sama seperti belum ada daftar: pilihan
+      // "Semua tamu" tetap jalan, jadi Broadcast tidak ikut mati.
+      .catch(() => setDaftarTamu([]))
   }, [])
 
   useEffect(() => {
@@ -86,14 +143,43 @@ export default function Broadcast() {
       .catch(() => setRiwayat([]))
   }, [versi])
 
+  // Sisa kuota & tarif dipakai kartu preset untuk menampilkan perkiraan rupiah
+  // SEBELUM staf memilih jumlah, jadi angkanya diambil begitu langkah 2 dibuka.
+  const [kuota, setKuota] = useState<{ sisa: number; terpakai: number } | null>(null)
   useEffect(() => {
-    const q = new URLSearchParams()
-    for (const id of pilihTag) q.append('tag', String(id))
-    fetch(`/api/segmen/hitung${q.toString() ? `?${q}` : ''}`)
+    fetch('/api/segmen/hitung?maks=-1')
       .then((r) => r.json())
-      .then((d: Hitung) => setHitung(d))
-      .catch(() => setHitung(null))
-  }, [pilihTag, versi])
+      .then((d: Hitung) => setKuota({ sisa: d.sisa_kuota, terpakai: d.terpakai_kuota }))
+      .catch(() => setKuota(null))
+  }, [versi])
+
+  /**
+   * Hitung penerima untuk satu preset lalu pindah ke layar konfirmasi. Angka di
+   * layar konfirmasi WAJIB berasal dari server, bukan dari label preset: label
+   * "200 tamu" tidak tahu berapa yang terbuang opt-out, jeda 24 jam, atau kuota.
+   */
+  async function hitungPreset(p: Preset) {
+    setGalatHitung('')
+    setMenghitung(true)
+    setPreset(p)
+    try {
+      const q = new URLSearchParams()
+      for (const id of pilihTag) q.append('tag', String(id))
+      if (pilihDaftar) q.set('daftar', pilihDaftar)
+      q.set('maks', String(p.maks))
+      const res = await fetch(`/api/segmen/hitung?${q}`)
+      if (!res.ok) throw new Error('gagal')
+      const d = (await res.json()) as Hitung
+      setHitung(d)
+      setLangkah(3)
+    } catch {
+      setHitung(null)
+      setPreset(null)
+      setGalatHitung('Gagal menghitung jumlah penerima. Coba lagi.')
+    } finally {
+      setMenghitung(false)
+    }
+  }
 
   const berjalan = riwayat.find((c) => c.aktif)
   const templateTerpilih = template.find((t) => t.nama === pilihTemplate)
@@ -104,6 +190,15 @@ export default function Broadcast() {
   const gambarTakDipakai = !!templateTerpilih && !butuhGambar && gambarUrl.trim() !== ''
   const gambarBermasalah =
     (butuhGambar && gambarUrl.trim() === '') || gambarTakDipakai || (gambarUrl !== '' && gambarRusak)
+
+  // Meta cuma menyimpan nama template dalam bentuk huruf kecil bergaris bawah.
+  // Staf mengenali judul yang mereka tulis sendiri, jadi judul yang dipakai di
+  // layar; nama Meta tetap yang dikirim ke server.
+  const judulTemplate = templateTerpilih?.judul || pilihTemplate
+  const namaDaftar = daftarTamu.find((d) => d.id === pilihDaftar)?.nama ?? ''
+  const jumlahDilewati = hitung
+    ? hitung.dibuang_opt_out + hitung.dibuang_baru_dibc + hitung.dipotong_kuota
+    : 0
 
   // Polling progres campaign yang sedang berjalan — tanpa ini staf menekan
   // "Hentikan" berdasarkan angka basi dari load halaman pertama kali.
@@ -144,11 +239,7 @@ export default function Broadcast() {
   }, [berjalan?.id])
 
   async function kirim() {
-    if (!pilihTemplate || !hitung || hitung.akan_dikirim === 0) return
-    // Penjaga ganda: tombolnya memang sudah disabled, tapi kiriman tanpa segmen
-    // terpilih artinya blast ke SELURUH kontak. Terlalu mahal untuk cuma
-    // dijaga oleh satu atribut disabled.
-    if (pilihTag.length === 0 && !semuaKontak) return
+    if (!pilihTemplate || !hitung || !preset || hitung.akan_dikirim === 0) return
     setSibuk(true)
     setPesan('')
     try {
@@ -158,26 +249,26 @@ export default function Broadcast() {
         body: JSON.stringify({
           template: pilihTemplate,
           tag_ids: pilihTag,
+          daftar_id: pilihDaftar || undefined,
+          maks: preset.maks,
           gambar_url: gambarUrl.trim() || undefined,
         }),
       })
       const d = (await res.json().catch(() => null)) as { error?: string; pesan?: string } | null
       if (!res.ok) {
-        setPesan(
-          d?.error === 'masih_ada_yang_jalan'
-            ? 'Masih ada broadcast yang berjalan. Tunggu selesai atau hentikan dulu.'
-            : d?.error === 'target_kosong'
-              ? 'Tidak ada penerima yang layak dikirimi setelah penyaringan.'
-              : d?.pesan || 'Broadcast gagal dimulai.',
-        )
+        // Layar TIDAK dikembalikan ke langkah 1 di sini: sebagian besar galat di
+        // bawah bisa dibereskan staf lalu ditekan kirim lagi, dan memulangkan
+        // mereka ke awal berarti pilih templat, pilih daftar, dan hitung ulang.
+        setPesan(PESAN_GALAT[d?.error ?? ''] ?? d?.pesan ?? 'Broadcast gagal dimulai.')
         return
       }
-      setPesan('Broadcast dimulai.')
+      setPesan(preset.maks === -1 ? 'Pesan uji dikirim ke nomor tim.' : 'Broadcast dimulai.')
       setVersi((n) => n + 1)
+      setPreset(null)
+      setHitung(null)
+      setLangkah(1)
     } finally {
       setSibuk(false)
-      setAngkaKonfirmasi('')
-      setLangkah(1)
     }
   }
 
@@ -196,11 +287,10 @@ export default function Broadcast() {
     }
   }
 
-  const bisaLanjutSegmen = (pilihTag.length > 0 || semuaKontak) && !!hitung && hitung.akan_dikirim > 0 && !berjalan
 
   return (
     <div className="space-y-4">
-      <h1 className="font-display text-2xl text-ink">Broadcast</h1>
+      <h1 className="font-display text-2xl text-ink">Kirim Pesan</h1>
 
       {!metaSiap ? (
         <p className="kartu p-4 text-sm text-warn">
@@ -268,7 +358,7 @@ export default function Broadcast() {
                 nilai={pilihTemplate}
                 opsi={template.map((t) => ({
                   nilai: t.nama,
-                  label: t.nama,
+                  label: t.judul || t.nama,
                   catatan: t.isi ? t.isi.slice(0, 60) : undefined,
                 }))}
                 onPilih={setPilihTemplate}
@@ -298,24 +388,16 @@ export default function Broadcast() {
             </div>
 
             <div className="space-y-1.5">
-              <label htmlFor="gambar-url" className="text-sm font-medium text-ink">
-                {butuhGambar ? 'Gambar (wajib untuk template ini)' : 'Gambar (opsional)'}
-              </label>
-              <input
-                id="gambar-url"
-                type="url"
-                value={gambarUrl}
-                onChange={(e) => {
+              <UnggahGambar
+                nilai={gambarUrl}
+                wajib={butuhGambar}
+                onUbah={(url) => {
                   // Ganti alamat harus mulai bersih -- status "rusak" hanya
                   // berlaku untuk alamat yang barusan gagal dimuat.
                   setGambarRusak(false)
-                  setGambarUrl(e.target.value)
+                  setGambarUrl(url)
                 }}
-                className="kolom-isian"
               />
-              <p className="text-xs text-ink-soft">
-                Wajib https dan bisa dibuka publik. Kosongkan kalau promo ini tanpa gambar.
-              </p>
               {gambarUrl && gambarRusak ? (
                 <p className="text-xs text-bad">Gambar tidak bisa dibuka. Periksa alamatnya sebelum lanjut.</p>
               ) : null}
@@ -344,93 +426,172 @@ export default function Broadcast() {
         ) : null}
 
         {langkah === 2 ? (
-          <div className="space-y-4">
+          <div className="space-y-5">
             <div className="space-y-1.5">
-              <p className="text-sm font-medium text-ink">Segmen</p>
-              <div className="flex flex-wrap gap-1.5">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSemuaKontak(true)
-                    setPilihTag([])
-                  }}
-                  className={
-                    'rounded-full border px-2.5 py-1 text-xs transition-colors ' +
-                    (semuaKontak ? 'border-teal bg-teal text-white' : 'border-line text-ink-soft hover:text-ink')
-                  }
-                >
-                  Semua kontak
-                </button>
-              </div>
-              <PilihTag
-                tag={tag}
-                terpilih={pilihTag}
-                onUbah={(idBaru) => {
-                  setSemuaKontak(false)
-                  setPilihTag(idBaru)
-                }}
-              />
-              {!semuaKontak && pilihTag.length === 0 ? (
-                <p className="text-sm text-warn">
-                  Pilih minimal satu segmen. Kirim ke semua kontak harus dipilih sengaja.
+              <label htmlFor="daftar" className="text-sm font-medium text-ink">
+                Kirim ke daftar
+              </label>
+              <select
+                id="daftar"
+                value={pilihDaftar}
+                onChange={(e) => setPilihDaftar(e.target.value)}
+                className="kolom-isian"
+              >
+                <option value="">Semua tamu di CRM</option>
+                {daftarTamu.map((d) => (
+                  <option key={d.id} value={d.id}>
+                    {d.nama} ({angka(d.jumlah)} nomor)
+                  </option>
+                ))}
+              </select>
+              {daftarTamu.length === 0 ? (
+                <p className="text-xs text-ink-soft">
+                  Belum ada daftar tamu tersimpan. Unggah ekspor reservasi di menu Kontak kalau mau
+                  menyasar sekelompok tamu tertentu.
                 </p>
               ) : null}
             </div>
 
-            {hitung ? (
-              <div className="rounded-2xl border border-line bg-canvas-2 p-4 text-sm">
-                <p className="text-ink">
-                  <span className="font-display text-xl">{hitung.akan_dikirim}</span> penerima akan dikirimi
-                </p>
-                <ul className="mt-1.5 space-y-0.5 text-xs text-ink-soft">
-                  <li>{hitung.total_cocok} kontak cocok dengan segmen</li>
-                  {hitung.dibuang_opt_out > 0 ? (
-                    <li>{hitung.dibuang_opt_out} dilewati karena menolak dihubungi</li>
-                  ) : null}
-                  {hitung.dibuang_baru_dibc > 0 ? (
-                    <li>{hitung.dibuang_baru_dibc} dilewati karena baru dikirimi dalam 24 jam terakhir</li>
-                  ) : null}
-                  {hitung.dipotong_kuota > 0 ? <li>{hitung.dipotong_kuota} dipotong karena kuota harian</li> : null}
-                  <li>sisa kuota hari ini {hitung.sisa_kuota} penerima</li>
-                </ul>
-              </div>
-            ) : null}
-
-            <div className="flex gap-2">
-              <button type="button" onClick={() => setLangkah(1)} className="tombol tombol-garis">
-                Kembali
-              </button>
-              <button
-                type="button"
-                disabled={!bisaLanjutSegmen}
-                onClick={() => setLangkah(3)}
-                className="tombol tombol-utama"
-              >
-                Lanjut
-              </button>
+            <div className="space-y-1.5">
+              <p className="text-sm font-medium text-ink">
+                Saring lagi pakai tag <span className="text-ink-soft">(boleh dilewati)</span>
+              </p>
+              <PilihTag tag={tag} terpilih={pilihTag} onUbah={setPilihTag} />
             </div>
+
+            <div className="space-y-1.5">
+              <p className="text-sm font-medium text-ink">Kirim ke berapa tamu?</p>
+              {kuota ? (
+                <p className="text-xs text-ink-soft">
+                  Sisa kuota nomor hari ini {angka(kuota.sisa)} penerima.
+                </p>
+              ) : null}
+            </div>
+
+            {galatHitung ? <p className="text-sm text-bad">{galatHitung}</p> : null}
+
+            {menghitung ? (
+              <p className="text-sm text-ink-soft">Menghitung tamu yang akan menerima pesan ini…</p>
+            ) : (
+              <div className="space-y-2">
+                {PRESET.map((pr) => {
+                  // Perkiraan rupiah tidak ditampilkan untuk mode uji: tidak ada
+                  // tamu yang menerima, jadi angka biaya di situ cuma membingungkan.
+                  let biaya = ''
+                  let potongan = ''
+                  if (pr.maks !== -1 && kuota) {
+                    if (pr.maks === 0) {
+                      biaya = `Perkiraan hingga ${rupiah(kuota.sisa * TARIF_MARKETING)}`
+                      potongan =
+                        'Kalau tamu yang lolos lebih banyak dari sisa kuota, kiriman dipotong otomatis dan sisanya bisa dikirim besok.'
+                    } else {
+                      const kenaPotong = pr.maks > kuota.sisa
+                      const efektif = kenaPotong ? kuota.sisa : pr.maks
+                      biaya = `Perkiraan ${rupiah(efektif * TARIF_MARKETING)}`
+                      if (kenaPotong) {
+                        potongan = `Sisa kuota hari ini cuma ${angka(kuota.sisa)}, jumlahnya akan dipotong dan sisanya bisa dikirim besok.`
+                      }
+                    }
+                  }
+
+                  return (
+                    <button
+                      key={pr.maks}
+                      type="button"
+                      disabled={!!berjalan}
+                      onClick={() => hitungPreset(pr)}
+                      className={
+                        'w-full rounded-2xl border p-4 text-left transition-colors disabled:opacity-50 ' +
+                        (pr.maks === -1 ? 'border-teal bg-teal/5' : 'border-line hover:border-teal')
+                      }
+                    >
+                      <p className="font-medium text-ink">{pr.label}</p>
+                      <p className="text-xs text-ink-soft">{pr.keterangan}</p>
+                      {biaya ? <p className="mt-1 text-xs font-semibold text-teal">{biaya}</p> : null}
+                      {potongan ? <p className="mt-1 text-xs text-warn">{potongan}</p> : null}
+                    </button>
+                  )
+                })}
+              </div>
+            )}
+
+            <button type="button" onClick={() => setLangkah(1)} className="tombol tombol-garis">
+              Kembali
+            </button>
           </div>
         ) : null}
 
-        {langkah === 3 && hitung ? (
+        {langkah === 3 && hitung && preset ? (
           <div className="space-y-4">
-            <button type="button" onClick={() => setLangkah(2)} className="tombol tombol-garis text-sm">
+            <button
+              type="button"
+              onClick={() => {
+                setHitung(null)
+                setPreset(null)
+                setLangkah(2)
+              }}
+              className="tombol tombol-garis text-sm"
+            >
               Kembali
             </button>
 
             <div className="kartu space-y-2 p-4">
-              <p className="text-ink">
-                <span className="font-display text-xl">{hitung.akan_dikirim}</span> penerima aktif
-              </p>
-              <ul className="space-y-0.5 text-xs text-ink-soft">
-                <li>{hitung.total_cocok} kontak cocok</li>
-                {hitung.dibuang_opt_out > 0 ? <li>{hitung.dibuang_opt_out} menolak dihubungi</li> : null}
-                {hitung.dibuang_baru_dibc > 0 ? (
-                  <li>{hitung.dibuang_baru_dibc} baru dikirimi dalam 24 jam</li>
-                ) : null}
-                {hitung.dipotong_kuota > 0 ? <li>{hitung.dipotong_kuota} dipotong kuota harian</li> : null}
-              </ul>
+              {hitung.uji ? (
+                <>
+                  <p className="text-ink">
+                    Kirim <span className="font-semibold">{judulTemplate}</span> sebagai pesan uji ke nomor
+                    tim{hitung.nomor_uji ? ` ${hitung.nomor_uji}` : ''}.
+                  </p>
+                  <p className="text-sm text-ink-soft">Tidak ada tamu yang menerima pesan ini.</p>
+                </>
+              ) : (
+                <>
+                  <p className="text-ink">
+                    Kirim promo <span className="font-semibold">{judulTemplate}</span> ke{' '}
+                    <span className="font-semibold">{angka(hitung.akan_dikirim)} tamu</span>
+                    {namaDaftar ? ` dari daftar ${namaDaftar}` : ''}.
+                  </p>
+                  <p className="text-ink">
+                    Perkiraan biaya sekitar{' '}
+                    <span className="font-display text-xl">
+                      {rupiah(hitung.akan_dikirim * TARIF_MARKETING)}
+                    </span>
+                  </p>
+                  <p className="text-xs text-ink-soft">
+                    {angka(hitung.akan_dikirim)} pesan × Rp 586. Angka pastinya keluar dari Meta setelah
+                    kiriman selesai.
+                  </p>
+                </>
+              )}
             </div>
+
+            {!hitung.uji && jumlahDilewati > 0 ? (
+              <div className="kartu space-y-1 p-4">
+                <p className="text-xs font-semibold tracking-wide text-ink-soft uppercase">
+                  Tamu yang dilewati
+                </p>
+                <ul className="space-y-0.5 text-sm text-ink-soft">
+                  {hitung.dibuang_baru_dibc > 0 ? (
+                    <li className="flex justify-between gap-3">
+                      <span>baru saja dikirimi</span>
+                      <span className="font-semibold text-ink">{angka(hitung.dibuang_baru_dibc)}</span>
+                    </li>
+                  ) : null}
+                  {hitung.dibuang_opt_out > 0 ? (
+                    <li className="flex justify-between gap-3">
+                      <span>menolak dihubungi</span>
+                      <span className="font-semibold text-ink">{angka(hitung.dibuang_opt_out)}</span>
+                    </li>
+                  ) : null}
+                  {hitung.dipotong_kuota > 0 ? (
+                    <li className="flex justify-between gap-3">
+                      <span>dipotong kuota hari ini</span>
+                      <span className="font-semibold text-ink">{angka(hitung.dipotong_kuota)}</span>
+                    </li>
+                  ) : null}
+                </ul>
+              </div>
+            ) : null}
 
             <div className="kartu space-y-2 p-4">
               <p className="text-sm font-medium text-ink">Pesan yang akan dikirim</p>
@@ -453,50 +614,23 @@ export default function Broadcast() {
               </div>
             </div>
 
-            <div className="kartu space-y-1 p-4">
-              <p className="font-display text-xl text-ink">
-                Rp {(hitung.akan_dikirim * TARIF_MARKETING).toLocaleString('id-ID')}
+            {hitung.akan_dikirim === 0 ? (
+              <p className="text-sm text-bad">
+                Tidak ada tamu yang layak dikirimi setelah penyaringan. Ganti daftar atau tunggu jeda 24 jam
+                lewat.
               </p>
-              <p className="text-xs text-ink-soft">
-                Perkiraan {hitung.akan_dikirim} pesan × Rp 586. Angka pastinya keluar dari Meta setelah kiriman
-                selesai.
-              </p>
-            </div>
-
-            <div className="space-y-1.5">
-              <label htmlFor="konfirmasi-angka" className="text-sm font-medium text-ink">
-                Ketik jumlah penerima untuk memastikan
-              </label>
-              <input
-                id="konfirmasi-angka"
-                type="text"
-                inputMode="numeric"
-                value={angkaKonfirmasi}
-                onChange={(e) => setAngkaKonfirmasi(e.target.value)}
-                className="kolom-isian"
-              />
-            </div>
-
-            <div className="flex gap-2">
-              <button
-                type="button"
-                disabled={sibuk || gambarBermasalah || angkaKonfirmasi !== String(hitung.akan_dikirim)}
-                onClick={kirim}
-                className="tombol tombol-utama"
-              >
-                Kirim sekarang
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setAngkaKonfirmasi('')
-                  setLangkah(2)
-                }}
-                className="tombol tombol-garis"
-              >
-                Batal
-              </button>
-            </div>
+            ) : (
+              <>
+                <p className="text-sm text-ink-soft">
+                  Tekan dan tahan tombol di bawah selama 3 detik untuk mengirim.
+                </p>
+                <TahanKirim
+                  label={hitung.uji ? 'Tahan untuk kirim uji' : 'Tahan untuk kirim'}
+                  disabled={sibuk || gambarBermasalah || !!berjalan}
+                  onSelesai={kirim}
+                />
+              </>
+            )}
           </div>
         ) : null}
       </div>

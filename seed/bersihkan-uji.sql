@@ -16,3 +16,8 @@ DELETE FROM pengiriman WHERE nomor LIKE '62899%';
 DELETE FROM campaign WHERE template = 'hello_world';
 DELETE FROM opt_out_log WHERE nomor LIKE '62899%';
 DELETE FROM status_menunggu WHERE wamid LIKE 'wamid.62899%' OR wamid LIKE 'wamid.uji%';
+
+-- Daftar tamu uji. Nama daftar E2E selalu berawalan 'daftar-e2e-'.
+DELETE FROM daftar_kontak WHERE daftar_id IN (SELECT id FROM daftar WHERE nama LIKE 'daftar-e2e-%');
+DELETE FROM daftar_kontak WHERE nomor LIKE '62899%';
+DELETE FROM daftar WHERE nama LIKE 'daftar-e2e-%';

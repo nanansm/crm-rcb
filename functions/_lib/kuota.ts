@@ -38,6 +38,8 @@ export async function sisaKuota(env: Env): Promise<SisaKuota> {
 export interface TargetSegmenInput {
   tagIds: number[]
   maks?: number
+  /** `null`/kosong = seluruh kontak. Kalau diisi, cuma anggota daftar itu. */
+  daftarId?: string | null
 }
 
 export interface TargetSegmenHasil {
@@ -55,8 +57,16 @@ export interface TargetSegmenHasil {
  */
 export async function targetSegmen(env: Env, input: TargetSegmenInput): Promise<TargetSegmenHasil> {
   const { tagIds, maks } = input
+  const daftarId = typeof input.daftarId === 'string' && input.daftarId.trim() !== '' ? input.daftarId.trim() : null
   const kondisiTag: string[] = []
   const paramTag: (string | number)[] = []
+
+  // Daftar tamu hasil unggahan dipasang sebagai penyaring PERTAMA, sederajat
+  // dengan tag: hasilnya tetap lewat saringan opt-out, jeda 24 jam, dan kuota.
+  if (daftarId) {
+    kondisiTag.push('nomor IN (SELECT nomor FROM daftar_kontak WHERE daftar_id = ?)')
+    paramTag.push(daftarId)
+  }
 
   // Butuh SEMUA tag yang diminta: cocokkan lewat kontak_tag lalu syaratkan
   // jumlah tag yang match sama dengan jumlah tag yang diminta.

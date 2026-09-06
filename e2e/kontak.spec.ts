@@ -194,7 +194,7 @@ test.describe('kontak & segmen (tag)', () => {
     await page.getByLabel('Kata sandi').fill(STAF_PASSWORD)
     await page.getByRole('button', { name: 'Masuk' }).click()
 
-    await page.getByRole('button', { name: 'Kontak' }).click()
+    await page.getByRole('button', { name: 'Kontak & Daftar Tamu' }).click()
 
     await page.getByPlaceholder('Tag baru').fill(namaTag)
     await page.getByRole('button', { name: 'Tambah tag' }).click()

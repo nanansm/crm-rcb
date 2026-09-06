@@ -123,7 +123,7 @@ export default function Dashboard({ nama }: { nama: string }) {
   return (
     <div className="space-y-4">
       <div>
-        <h1 className="font-display text-2xl text-ink">Dashboard</h1>
+        <h1 className="font-display text-2xl text-ink">Ringkasan</h1>
         <p className="text-sm text-ink-soft">
           Halo, {nama}. Data terakhir diperbarui {jamMenit(data.diperbarui)}.
         </p>

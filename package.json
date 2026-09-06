@@ -9,14 +9,15 @@
     "lint": "oxlint",
     "preview": "vite preview",
     "typecheck": "tsc -b && tsc -p tsconfig.functions.json",
-    "db:lokal": "wrangler d1 execute crm-rcb --local --file migrations/0001_awal.sql && wrangler d1 execute crm-rcb --local --file migrations/0002_gambar_broadcast.sql && wrangler d1 execute crm-rcb --local --file migrations/0003_promo_meta.sql && wrangler d1 execute crm-rcb --local --file seed/lokal.sql",
+    "db:lokal": "wrangler d1 execute crm-rcb --local --file migrations/0001_awal.sql && wrangler d1 execute crm-rcb --local --file migrations/0002_gambar_broadcast.sql && wrangler d1 execute crm-rcb --local --file migrations/0003_promo_meta.sql && wrangler d1 execute crm-rcb --local --file migrations/0004_daftar_tamu.sql && wrangler d1 execute crm-rcb --local --file seed/lokal.sql",
     "dev:cf": "vite build && wrangler pages dev dist --port 8788",
     "e2e": "playwright test",
     "e2e:ui": "playwright test --ui"
   },
   "dependencies": {
     "react": "^19.2.8",
-    "react-dom": "^19.2.8"
+    "react-dom": "^19.2.8",
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20260902.1",

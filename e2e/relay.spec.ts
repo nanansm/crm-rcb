@@ -178,7 +178,7 @@ test.describe('relay pesan-masuk & balasan-agent', () => {
     await page.getByLabel('Kata sandi').fill(STAF_PASSWORD)
     await page.getByRole('button', { name: 'Masuk' }).click()
 
-    await page.getByRole('button', { name: 'Inbox' }).click()
+    await page.getByRole('button', { name: 'Inbox', exact: true }).click()
     await page.getByPlaceholder('Cari nomor atau nama').fill(nomor)
     const baris = page.getByRole('button', { name: new RegExp(nomor) })
     await baris.click()

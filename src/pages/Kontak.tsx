@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import ImporDaftar, { type DaftarRingkas } from '../komponen/ImporDaftar'
 import Pilih from '../komponen/Pilih'
 import PilihTag from '../komponen/PilihTag'
 
@@ -54,6 +55,11 @@ export default function Kontak() {
   const [memuat, setMemuat] = useState(true)
   const [versi, setVersi] = useState(0)
 
+  const [bukaImpor, setBukaImpor] = useState(false)
+  const [daftarTamu, setDaftarTamu] = useState<DaftarRingkas[]>([])
+  const [hapusDikonfirmasi, setHapusDikonfirmasi] = useState<string | null>(null)
+  const timeoutHapus = useRef<number | null>(null)
+
   // penanda "Tersimpan" sementara untuk catatan/tag/optout, dan galat per kontrol
   const [tersimpan, setTersimpan] = useState('')
   const [galatCatatan, setGalatCatatan] = useState('')
@@ -65,7 +71,13 @@ export default function Kontak() {
     // bersihkan timeout kalau komponen lepas sebelum 2 detik habis
     return () => {
       if (timeoutTersimpan.current) clearTimeout(timeoutTersimpan.current)
+      if (timeoutHapus.current) clearTimeout(timeoutHapus.current)
     }
+  }, [])
+
+  useEffect(() => {
+    muatDaftarTamu()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   function tandaiTersimpan(nama: string) {
@@ -194,11 +206,80 @@ export default function Kontak() {
     }
   }
 
+  function muatDaftarTamu() {
+    fetch('/api/daftar')
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error('gagal'))))
+      .then((d: { daftar: DaftarRingkas[] }) => setDaftarTamu(d.daftar))
+      // Gagal memuat daftar tidak boleh mengunci halaman kontak: daftarnya cuma
+      // pelengkap di sini, layar utamanya tetap tabel kontak.
+      .catch(() => setDaftarTamu([]))
+  }
+
+  function hapusDaftarTamu(id: string) {
+    if (hapusDikonfirmasi !== id) {
+      setHapusDikonfirmasi(id)
+      if (timeoutHapus.current) clearTimeout(timeoutHapus.current)
+      // Konfirmasi batal sendiri setelah 4 detik supaya tombol merah tidak
+      // menganggur menunggu ketukan berikutnya.
+      timeoutHapus.current = window.setTimeout(() => setHapusDikonfirmasi(null), 4000)
+      return
+    }
+    if (timeoutHapus.current) clearTimeout(timeoutHapus.current)
+    setHapusDikonfirmasi(null)
+    fetch(`/api/daftar?id=${encodeURIComponent(id)}`, { method: 'DELETE' }).then(muatDaftarTamu)
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h1 className="font-display text-2xl text-ink">Kontak &amp; Segmen</h1>
+        <h1 className="font-display text-2xl text-ink">Kontak &amp; Daftar Tamu</h1>
         <p className="text-sm text-ink-soft">{total} kontak cocok</p>
+      </div>
+
+      <div className="kartu p-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="font-medium text-ink">Daftar tamu dari file</p>
+            <p className="text-sm text-ink-soft">
+              Unggah ekspor reservasi (.xlsx/.csv) jadi satu daftar yang bisa dipilih di Broadcast.
+            </p>
+          </div>
+          <button type="button" onClick={() => setBukaImpor((b) => !b)} className="tombol tombol-garis">
+            {bukaImpor ? 'Tutup' : 'Impor file'}
+          </button>
+        </div>
+
+        {bukaImpor ? (
+          <div className="mt-4 border-t border-line pt-4">
+            <ImporDaftar onSelesai={muatDaftarTamu} />
+          </div>
+        ) : null}
+
+        {daftarTamu.length > 0 ? (
+          <div className="mt-4 space-y-2 border-t border-line pt-4">
+            {daftarTamu.map((d) => (
+              <div key={d.id} className="flex items-center justify-between gap-3 rounded-lg border border-line px-3 py-2">
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium text-ink">{d.nama}</p>
+                  <p className="truncate text-xs text-ink-soft">
+                    {d.jumlah.toLocaleString('id-ID')} nomor
+                    {d.keterangan ? ` · ${d.keterangan}` : ''}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => hapusDaftarTamu(d.id)}
+                  className={
+                    'shrink-0 rounded-lg px-3 py-1.5 text-xs font-semibold ' +
+                    (hapusDikonfirmasi === d.id ? 'bg-bad text-white' : 'border border-line text-ink-soft')
+                  }
+                >
+                  {hapusDikonfirmasi === d.id ? 'Yakin, hapus?' : 'Hapus'}
+                </button>
+              </div>
+            ))}
+          </div>
+        ) : null}
       </div>
 
       <div className="kartu space-y-3 p-4">

@@ -26,7 +26,13 @@ interface ResponN8nGagal {
  */
 export async function jalankanBroadcast(
   env: Env,
-  data: { campaignId: number; template: string; nomor: string[]; gambarUrl: string | null },
+  data: {
+    campaignId: number
+    template: string
+    bahasa: string
+    nomor: string[]
+    gambarUrl: string | null
+  },
 ): Promise<HasilBroadcast> {
   // Lokal/dev sengaja tidak punya URL & rahasia n8n -- ini keadaan normal, bukan galat.
   if (!env.N8N_BC_URL || !env.N8N_BC_SECRET) {
@@ -44,6 +50,9 @@ export async function jalankanBroadcast(
       body: JSON.stringify({
         campaignId: data.campaignId,
         template: data.template,
+        // Kode bahasa template. n8n TIDAK boleh menebak: template bawaan WABA
+        // berbahasa en_US, dan salah kode membuat Meta menolak setiap nomor.
+        bahasa: data.bahasa,
         nomor: data.nomor,
         // n8n yang menyusun components header image ke Graph API saat mengirim --
         // CRM cuma menentukan gambar mana yang dipakai.

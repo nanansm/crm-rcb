@@ -79,6 +79,12 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     .first<{ status: string; aktif: number | null }>()
   if (!campaign) return json({ lanjut: false, catatan: 'campaign tidak dikenal' })
 
+  // Staf menekan Hentikan (atau pemutus arus sudah jalan di batch sebelumnya):
+  // baris campaign sudah dilepas dari aktif=1. Hasil batch yang terlanjur
+  // berangkat tetap dicatat di bawah, tapi n8n WAJIB berhenti -- tanpa ini
+  // tombol Hentikan tidak menghentikan apa pun dan pengiriman jalan terus.
+  const sudahDihentikan = campaign.aktif !== 1
+
   const sekarang = new Date().toISOString()
   const statements: D1PreparedStatement[] = []
 
@@ -174,7 +180,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
 
   if (statements.length > 0) await env.DB.batch(statements)
 
-  if (selesaiDariN8n || putus) {
+  if (selesaiDariN8n || putus || sudahDihentikan) {
     await env.CRM_STATE.delete(kunci)
     return json({ lanjut: false })
   }

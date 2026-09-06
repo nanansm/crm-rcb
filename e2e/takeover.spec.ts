@@ -169,7 +169,7 @@ test.describe('takeover: ambil-alih & kembalikan', () => {
     await page.getByLabel('Kata sandi').fill(STAF_PASSWORD)
     await page.getByRole('button', { name: 'Masuk' }).click()
 
-    await page.getByRole('button', { name: 'Inbox' }).click()
+    await page.getByRole('button', { name: 'Inbox', exact: true }).click()
     await page.getByPlaceholder('Cari nomor atau nama').fill(nomor)
     await page.getByRole('button', { name: new RegExp(nomor) }).click()
 

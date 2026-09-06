@@ -23,6 +23,19 @@ export interface Env {
   N8N_BC_URL?: string
   /** Rahasia yang dikirim ke n8n dan dipakai n8n saat melapor balik. */
   N8N_BC_SECRET?: string
+  /**
+   * Nomor tujuan mode "Uji dulu" (format 628...). Disimpan sebagai variabel,
+   * bukan di dalam kode, karena repo ini publik.
+   */
+  NOMOR_UJI?: string
+  /** Bucket R2 tempat gambar promo diunggah staf disimpan. */
+  MEDIA?: R2Bucket
+  /**
+   * Alamat publik bucket MEDIA, tanpa garis miring di ujung
+   * (mis. https://media.rancabangohotel.com). Meta yang mengambil gambarnya
+   * sendiri, jadi alamat ini wajib bisa dibuka tanpa login.
+   */
+  MEDIA_BASE_URL?: string
 }
 
 export interface Pengguna {

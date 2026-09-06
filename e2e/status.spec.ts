@@ -130,11 +130,36 @@ test.describe('status callback & progres campaign', () => {
         },
       })
       expect(res.status()).toBe(200)
-      expect((await res.json()).lanjut).toBe(true)
+      // Campaign buatan fixture sudah dilepas dari aktif=1 (n8n tidak dikonfigurasi
+      // di lokal, jadi serah-terimanya gagal). Laporan batch yang telat datang tetap
+      // WAJIB dicatat, tapi jawabannya harus 'berhenti' -- lihat uji di bawah.
+      expect((await res.json()).lanjut).toBe(false)
     }
 
     const p = await progres(request, id)
     expect(p.terkirim).toBe(2)
+  })
+
+  test('campaign yang sudah dihentikan menyuruh n8n berhenti, hasilnya tetap dicatat', async ({
+    request,
+  }) => {
+    const id = await buatCampaign(request)
+    await loginStaf(request)
+    // Hentikan eksplisit: ini yang terjadi saat staf menekan tombol Hentikan.
+    expect((await request.delete('/api/campaign')).status()).toBe(200)
+
+    const nomor = nomorUjiAcak()
+    const res = await request.post('/api/campaign/progress-callback', {
+      headers: { 'X-BC-Secret': BC_SECRET },
+      data: { campaign_id: id, hasil: [{ nomor, wamid: `wamid.${nomor}.stop`, status: 'terkirim' }] },
+    })
+    expect(res.status()).toBe(200)
+    // Tanpa ini tombol Hentikan tidak menghentikan apa pun: n8n terus mengirim
+    // batch berikutnya sampai daftar nomor habis.
+    expect((await res.json()).lanjut).toBe(false)
+
+    const p = await progres(request, id)
+    expect(p.terkirim).toBe(1)
   })
 
   test('nomor terkirim langsung ditandai terakhir_bc, jadi tidak masuk segmen lagi', async ({ request }) => {
