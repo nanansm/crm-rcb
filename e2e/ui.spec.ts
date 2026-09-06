@@ -150,6 +150,53 @@ test.describe('UI dipakai seperti staf memakainya', () => {
     await expect(page.getByRole('button', { name: 'Kirim sekarang' })).toHaveCount(0)
   })
 
+  test('template: pratinjau memperlihatkan tulisan seperti yang tamu baca', async ({ page }) => {
+    await masuk(page)
+    await page.getByRole('button', { name: 'Template', exact: true }).click()
+
+    await page.fill('#isi', 'Terima kasih sudah pernah menginap di Rancabango.')
+    await page.fill('#footer', 'Rancabango Hotel and Resort')
+
+    // Pengajuan ke Meta tidak bisa ditarik kembali, jadi pratinjau wajib
+    // memperlihatkan isi yang sedang diketik, bukan menunggu tombol simpan.
+    // Dicari di paragraf, bukan di seluruh halaman: textarea isian memuat teks
+    // yang sama persis, jadi pencarian polos akan cocok dua kali.
+    const gelembung = page.getByRole('paragraph').filter({
+      hasText: 'Terima kasih sudah pernah menginap di Rancabango.',
+    })
+    await expect(gelembung).toBeVisible()
+    await expect(
+      page.getByRole('paragraph').filter({ hasText: /^Rancabango Hotel and Resort$/ }),
+    ).toBeVisible()
+  })
+
+  test('template: kolom link cuma muncul kalau tombolnya memang buka link', async ({ page }) => {
+    await masuk(page)
+    await page.getByRole('button', { name: 'Template', exact: true }).click()
+
+    await expect(page.locator('#tombolUrl')).toHaveCount(0)
+    await expect(page.locator('#tombolTeks')).toHaveCount(0)
+
+    await page.getByRole('button', { name: 'Buka link website' }).click()
+    await expect(page.locator('#tombolUrl')).toBeVisible()
+    await expect(page.locator('#tombolTeks')).toBeVisible()
+
+    await page.getByRole('button', { name: 'Tombol balasan cepat' }).click()
+    await expect(page.locator('#tombolUrl')).toHaveCount(0)
+    await expect(page.locator('#tombolTeks')).toBeVisible()
+  })
+
+  test('template: isian yang salah dihentikan sebelum menyentuh WhatsApp', async ({ page }) => {
+    await masuk(page)
+    await page.getByRole('button', { name: 'Template', exact: true }).click()
+
+    await page.fill('#judul', 'Sapa Tamu Lama')
+    await page.fill('#isi', 'halo')
+    await page.getByRole('button', { name: 'Ajukan template ke WhatsApp' }).click()
+
+    await expect(page.getByText('Isi pesan terlalu pendek.')).toBeVisible()
+  })
+
   test('kontak: catatan yang gagal disimpan tidak dibiarkan diam', async ({ page, request }) => {
     const nomor = nomorUjiAcak()
     await kirimMasuk(request, nomor, 'halo catatan', `wamid.${nomor}.ui5`)

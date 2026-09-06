@@ -11,6 +11,9 @@ function nomorUjiAcak(): string {
   return `62899300${acak}`
 }
 
+const ISI_SAH =
+  'Terima kasih sudah pernah menginap di Rancabango. Semoga kabarnya baik selalu.'
+
 async function loginStaf(request: APIRequestContext): Promise<void> {
   const res = await request.post('/api/login', {
     data: { email: STAF_EMAIL, password: STAF_PASSWORD },
@@ -33,37 +36,119 @@ test.describe('template & dashboard', () => {
     expect(body.template).toEqual([])
   })
 
-  test('nama template berhuruf besar ditolak sebelum menyentuh Meta', async ({ request }) => {
+  test('nama template terlalu pendek ditolak sebelum menyentuh Meta', async ({ request }) => {
     await loginStaf(request)
     const res = await request.post('/api/template', {
-      data: { nama: 'Promo Akhir Pekan', bahasa: 'id', kategori: 'MARKETING', isi: 'halo' },
+      data: { judul: 'ab', kategori: 'MARKETING', isi: ISI_SAH },
     })
     expect(res.status()).toBe(400)
-    expect((await res.json()).error).toBe('nama_hanya_huruf_kecil_angka_garis_bawah')
+    expect((await res.json()).error).toBe('Nama template terlalu pendek.')
+  })
+
+  test('isi pesan di bawah 30 huruf ditolak', async ({ request }) => {
+    await loginStaf(request)
+    const res = await request.post('/api/template', {
+      data: { judul: 'Sapa Tamu Lama', kategori: 'MARKETING', isi: 'halo' },
+    })
+    expect(res.status()).toBe(400)
+    expect((await res.json()).error).toBe('Isi pesan terlalu pendek.')
+  })
+
+  // Broadcast di sini tidak pernah mengirim parameter, jadi template ber-{{1}}
+  // pasti gagal saat dipakai kirim. Ditutup di pintu masuk, bukan di Meta.
+  test('isi pesan ber-{{ }} ditolak karena pengiriman tidak mengirim parameter', async ({
+    request,
+  }) => {
+    await loginStaf(request)
+    const res = await request.post('/api/template', {
+      data: { judul: 'Sapa Tamu Lama', kategori: 'MARKETING', isi: `Halo {{1}}, ${ISI_SAH}` },
+    })
+    expect(res.status()).toBe(400)
+    expect((await res.json()).error).toContain('{{ }}')
+  })
+
+  test('jenis template selain MARKETING dan UTILITY ditolak', async ({ request }) => {
+    await loginStaf(request)
+    const res = await request.post('/api/template', {
+      data: { judul: 'Sapa Tamu Lama', kategori: 'AUTHENTICATION', isi: ISI_SAH },
+    })
+    expect(res.status()).toBe(400)
+    expect((await res.json()).error).toBe('Jenis template tidak dikenali.')
   })
 
   test('tombol wa.me ditolak karena Meta selalu menolaknya', async ({ request }) => {
     await loginStaf(request)
     const res = await request.post('/api/template', {
       data: {
-        nama: 'promo_wa',
-        bahasa: 'id',
+        judul: 'Sapa Tamu Lama',
         kategori: 'MARKETING',
-        isi: 'halo',
-        tombol: [{ jenis: 'URL', teks: 'Chat', url: 'https://wa.me/628112237711' }],
+        isi: ISI_SAH,
+        tombol: { tipe: 'situs', teks: 'Chat', url: 'https://wa.me/628112237711' },
       },
     })
     expect(res.status()).toBe(400)
-    expect((await res.json()).error).toBe('tombol_url_wa_me_ditolak_meta_pakai_balasan_cepat')
+    expect((await res.json()).error).toContain('wa.me')
+  })
+
+  test('tombol link tanpa https ditolak', async ({ request }) => {
+    await loginStaf(request)
+    const res = await request.post('/api/template', {
+      data: {
+        judul: 'Sapa Tamu Lama',
+        kategori: 'MARKETING',
+        isi: ISI_SAH,
+        tombol: { tipe: 'situs', teks: 'Tulis Ulasan', url: 'http://g.page/r/abc/review' },
+      },
+    })
+    expect(res.status()).toBe(400)
+    expect((await res.json()).error).toContain('https://')
+  })
+
+  test('masa berlaku yang sudah lewat ditolak', async ({ request }) => {
+    await loginStaf(request)
+    const res = await request.post('/api/template', {
+      data: {
+        judul: 'Sapa Tamu Lama',
+        kategori: 'MARKETING',
+        isi: ISI_SAH,
+        berlaku_sampai: '2020-01-01',
+      },
+    })
+    expect(res.status()).toBe(400)
+    expect((await res.json()).error).toBe('Masa berlaku tidak boleh tanggal yang sudah lewat.')
+  })
+
+  // Isian yang salah adalah salah staf dan harus dibilang begitu, apa pun keadaan
+  // kredensial server. Kredensial baru diperiksa sesudah isiannya bersih.
+  test('isian salah dijawab 400, bukan 503 kredensial', async ({ request }) => {
+    await loginStaf(request)
+    const res = await request.post('/api/template', {
+      data: { judul: 'Sapa Tamu Lama', kategori: 'MARKETING', isi: ISI_SAH, gambar_url: 'bukan-url' },
+    })
+    expect(res.status()).toBe(400)
   })
 
   test('pengajuan template gagal jelas saat kredensial Meta belum ada', async ({ request }) => {
     await loginStaf(request)
     const res = await request.post('/api/template', {
-      data: { nama: 'promo_sah', bahasa: 'id', kategori: 'MARKETING', isi: 'halo {{1}}' },
+      data: {
+        judul: 'Sapa Tamu Lama Review',
+        ringkas: 'Ucapan terima kasih ke tamu yang pernah menginap',
+        kategori: 'MARKETING',
+        isi: ISI_SAH,
+        footer: 'Rancabango Hotel and Resort',
+        tombol: { tipe: 'situs', teks: 'Tulis Ulasan', url: 'https://g.page/r/abc/review' },
+      },
     })
     expect(res.status()).toBe(503)
     expect((await res.json()).error).toBe('meta_belum_dikonfigurasi')
+  })
+
+  test('pengajuan template ditolak tanpa sesi staf', async ({ request }) => {
+    const res = await request.post('/api/template', {
+      data: { judul: 'Sapa Tamu Lama', kategori: 'MARKETING', isi: ISI_SAH },
+    })
+    expect(res.status()).toBe(401)
   })
 
   test('dashboard ditolak tanpa sesi staf', async ({ request }) => {

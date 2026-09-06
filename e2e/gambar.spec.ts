@@ -102,14 +102,13 @@ test.describe('gambar broadcast', () => {
     await loginStaf(request)
     const res = await request.post('/api/template', {
       data: {
-        nama: 'promo_gambar',
-        bahasa: 'id',
+        judul: 'Promo Gambar',
         kategori: 'MARKETING',
-        isi: 'halo',
+        isi: 'Terima kasih sudah pernah menginap di Rancabango. Semoga kabarnya baik.',
         gambar_url: 'http://contoh.test/a.jpg',
       },
     })
     expect(res.status()).toBe(400)
-    expect((await res.json()).error).toBe('gambar_url_wajib_https')
+    expect((await res.json()).error).toContain('https://')
   })
 })
