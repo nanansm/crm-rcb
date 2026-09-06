@@ -73,24 +73,33 @@ async function hashToken(token: string): Promise<string> {
   return base64url(await crypto.subtle.digest('SHA-256', encoder.encode(token)))
 }
 
+/**
+ * `Secure` hanya dipasang untuk permintaan https. Produksi selalu https, jadi
+ * di sana atribut ini tetap ada; tanpa pengecualian ini, cookie tidak pernah
+ * tersimpan saat aplikasi dijalankan lokal lewat http dan seluruh uji E2E
+ * gagal dengan 401 yang menyesatkan.
+ */
+function atributCookie(request: Request, umurDetik: number): string {
+  const https = new URL(request.url).protocol === 'https:'
+  return ['Path=/', 'HttpOnly', ...(https ? ['Secure'] : []), 'SameSite=Lax', `Max-Age=${umurDetik}`].join('; ')
+}
+
 /** Buat sesi baru di D1 (token acak, cuma hash-nya yang disimpan) dan kembalikan header Set-Cookie. */
-export async function buatSesiCookie(env: Env, penggunaId: number, ip: string): Promise<string> {
+export async function buatSesiCookie(
+  env: Env,
+  penggunaId: number,
+  ip: string,
+  request: Request,
+): Promise<string> {
   const token = base64url(crypto.getRandomValues(new Uint8Array(32)).buffer)
   const tokenHash = await hashToken(token)
   const kadaluarsa = new Date(Date.now() + SESSION_TTL_MS).toISOString()
   await catatSesi(env, { tokenHash, penggunaId, kadaluarsa, ip })
-  return [
-    `${COOKIE_NAME}=${token}`,
-    'Path=/',
-    'HttpOnly',
-    'Secure',
-    'SameSite=Lax',
-    `Max-Age=${SESSION_TTL_SECONDS}`,
-  ].join('; ')
+  return `${COOKIE_NAME}=${token}; ${atributCookie(request, SESSION_TTL_SECONDS)}`
 }
 
-export function hapusSesiCookie(): string {
-  return `${COOKIE_NAME}=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0`
+export function hapusSesiCookie(request: Request): string {
+  return `${COOKIE_NAME}=; ${atributCookie(request, 0)}`
 }
 
 export type HasilGuard = { ok: true; penggunaId: number } | { ok: false }

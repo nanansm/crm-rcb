@@ -6,6 +6,23 @@
 export interface Env {
   DB: D1Database
   CRM_STATE: KVNamespace
+  RELAY_SECRET: string
+  /** Opsional, dipakai lingkungan uji saja. Kosong = pakai batas bawaan. */
+  MAKS_LOGIN_GAGAL?: string
+  /** Token system user Meta. Hanya ada di produksi; lokal sengaja kosong. */
+  META_TOKEN?: string
+  /** ID nomor WhatsApp pengirim di Meta. */
+  META_PHONE_ID?: string
+  /** ID WhatsApp Business Account, dipakai jalur template. */
+  META_WABA_ID?: string
+  // ID aplikasi Meta. Dipakai HANYA untuk mengunggah gambar header template
+  // lewat Resumable Upload API -- Meta menolak URL gambar saat template dibuat,
+  // yang diterima cuma handle hasil unggahan.
+  META_APP_ID?: string
+  /** URL webhook n8n `RCB - BC Run` yang menjalankan broadcast per batch. */
+  N8N_BC_URL?: string
+  /** Rahasia yang dikirim ke n8n dan dipakai n8n saat melapor balik. */
+  N8N_BC_SECRET?: string
 }
 
 export interface Pengguna {

@@ -8,7 +8,11 @@
     "build": "tsc -b && vite build",
     "lint": "oxlint",
     "preview": "vite preview",
-    "typecheck": "tsc -b && tsc -p tsconfig.functions.json"
+    "typecheck": "tsc -b && tsc -p tsconfig.functions.json",
+    "db:lokal": "wrangler d1 execute crm-rcb --local --file migrations/0001_awal.sql && wrangler d1 execute crm-rcb --local --file seed/lokal.sql",
+    "dev:cf": "vite build && wrangler pages dev dist --port 8788",
+    "e2e": "playwright test",
+    "e2e:ui": "playwright test --ui"
   },
   "dependencies": {
     "react": "^19.2.8",
@@ -16,6 +20,7 @@
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20260902.1",
+    "@playwright/test": "^1.63.0",
     "@tailwindcss/vite": "^4.1.16",
     "@types/node": "^24.13.3",
     "@types/react": "^19.2.18",
@@ -24,6 +29,7 @@
     "oxlint": "^1.79.0",
     "tailwindcss": "^4.1.16",
     "typescript": "~6.0.2",
-    "vite": "^8.2.2"
+    "vite": "^8.2.2",
+    "wrangler": "^4.129.0"
   }
 }

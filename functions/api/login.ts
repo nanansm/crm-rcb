@@ -2,7 +2,7 @@ import { ambilPenggunaByEmail, type Env } from '../_lib/db'
 import { buatSesiCookie, json, verifyPassword } from '../_lib/auth'
 
 const PESAN_GAGAL = 'Email atau kata sandi salah'
-const BATAS_GAGAL = 8
+const BATAS_GAGAL_BAWAAN = 8
 const JENDELA_GAGAL_DETIK = 15 * 60
 
 // Hash dummy (bukan hash siapa pun) dengan format valid salt:hash. Dipakai
@@ -24,10 +24,12 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     return json({ error: 'Email dan kata sandi wajib diisi.' }, { status: 400 })
   }
 
-  // Pembatas percobaan gagal, dicek sebelum menyentuh D1.
+  // Pembatas percobaan gagal, dicek sebelum menyentuh D1. Batasnya bisa
+  // dinaikkan lewat env untuk lingkungan uji, tanpa melonggarkan produksi.
+  const batasGagal = Number(env.MAKS_LOGIN_GAGAL) || BATAS_GAGAL_BAWAAN
   const kunciGagal = `login-gagal:${email}`
   const jumlahGagal = Number((await env.CRM_STATE.get(kunciGagal)) ?? '0')
-  if (jumlahGagal >= BATAS_GAGAL) {
+  if (jumlahGagal >= batasGagal) {
     return json({ error: 'Terlalu banyak percobaan, coba lagi nanti.' }, { status: 429 })
   }
 
@@ -46,7 +48,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   await env.CRM_STATE.delete(kunciGagal)
 
   const ip = request.headers.get('CF-Connecting-IP') ?? ''
-  const cookie = await buatSesiCookie(env, pengguna.id, ip)
+  const cookie = await buatSesiCookie(env, pengguna.id, ip, request)
   return json(
     { id: pengguna.id, nama: pengguna.nama, email: pengguna.email },
     { headers: { 'Set-Cookie': cookie } },

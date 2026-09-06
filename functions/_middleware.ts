@@ -6,7 +6,12 @@ const PUBLIC_PATHS = new Set(['/api/login', '/api/logout'])
 // Dipanggil mesin (n8n), bukan browser — belum ada filenya sekarang, tapi jalurnya
 // sudah dikecualikan di sini. Endpoint-endpoint ini akan mengesahkan dirinya sendiri
 // lewat header rahasia di fase berikutnya.
-const MACHINE_PATHS = new Set(['/api/pesan-masuk', '/api/balasan-agent', '/api/status-callback'])
+const MACHINE_PATHS = new Set([
+  '/api/pesan-masuk',
+  '/api/balasan-agent',
+  '/api/status-callback',
+  '/api/campaign/progress-callback',
+])
 
 const SECURITY_HEADERS: Record<string, string> = {
   'X-Content-Type-Options': 'nosniff',

@@ -28,3 +28,7 @@ dist-ssr
 .env
 .env.*
 .wrangler/
+dist/
+.wrangler/
+test-results/
+playwright-report/

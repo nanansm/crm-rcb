@@ -1,5 +1,10 @@
 import { useEffect, useState } from 'react'
+import Broadcast from './pages/Broadcast'
+import Dashboard from './pages/Dashboard'
+import Inbox from './pages/Inbox'
+import Kontak from './pages/Kontak'
 import Login from './pages/Login'
+import TemplatePage from './pages/Template'
 
 type StatusSesi = 'memuat' | 'keluar' | 'masuk'
 
@@ -11,7 +16,6 @@ const MENU: Array<{ id: Halaman; label: string }> = [
   { id: 'kontak', label: 'Kontak' },
   { id: 'broadcast', label: 'Broadcast' },
   { id: 'template', label: 'Template' },
-  { id: 'pengaturan', label: 'Pengaturan' },
 ]
 
 type Staf = { nama: string }
@@ -19,7 +23,24 @@ type Staf = { nama: string }
 export default function App() {
   const [status, setStatus] = useState<StatusSesi>('memuat')
   const [staf, setStaf] = useState<Staf | null>(null)
-  const [halaman, setHalaman] = useState<Halaman>('dashboard')
+  const [halaman, setHalaman] = useState<Halaman>(() => {
+    const dariHash = window.location.hash.slice(1) as Halaman
+    return MENU.some((item) => item.id === dariHash) ? dariHash : 'inbox'
+  })
+
+  useEffect(() => {
+    window.location.hash = halaman
+  }, [halaman])
+
+  // dengarkan tombol Back/Forward browser: alamat pindah tanpa lewat setHalaman
+  useEffect(() => {
+    const onHashChange = () => {
+      const dariHash = window.location.hash.slice(1) as Halaman
+      if (MENU.some((item) => item.id === dariHash)) setHalaman(dariHash)
+    }
+    window.addEventListener('hashchange', onHashChange)
+    return () => window.removeEventListener('hashchange', onHashChange)
+  }, [])
 
   useEffect(() => {
     let batal = false
@@ -100,15 +121,16 @@ export default function App() {
 
       <main className="w-full flex-1 px-4 py-6 md:px-8">
         <div className="mx-auto max-w-[1400px]">
-          {halaman === 'dashboard' ? (
-            <div className="space-y-4">
-              <h1 className="font-display text-2xl text-ink">Dashboard</h1>
-              <div className="kartu p-5">
-                <p className="text-ink-soft">
-                  Selamat datang, {staf?.nama ?? 'Staf'}. Ringkasan kerja akan tampil di sini.
-                </p>
-              </div>
-            </div>
+          {halaman === 'inbox' ? (
+            <Inbox />
+          ) : halaman === 'kontak' ? (
+            <Kontak />
+          ) : halaman === 'broadcast' ? (
+            <Broadcast />
+          ) : halaman === 'template' ? (
+            <TemplatePage />
+          ) : halaman === 'dashboard' ? (
+            <Dashboard nama={staf?.nama ?? 'Staf'} />
           ) : (
             <div className="space-y-4">
               <h1 className="font-display text-2xl text-ink">

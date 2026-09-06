@@ -8,5 +8,5 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     if (tokenHash) await hapusSesi(env, tokenHash)
   }
   // Tetap 200 walau sesi sudah tidak valid, biar tombol Keluar tidak macet.
-  return json({ ok: true }, { headers: { 'Set-Cookie': hapusSesiCookie() } })
+  return json({ ok: true }, { headers: { 'Set-Cookie': hapusSesiCookie(request) } })
 }
