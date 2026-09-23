@@ -22,6 +22,7 @@ export interface SimpanPesanInput {
  * dari kolom ini, jadi memakai jam server akan menggeser jendela setiap kali
  * webhook telat tiba. `MAX` menjaga jendela tidak mundur saat webhook tiba
  * tidak berurutan.
+ * `MAX(x,y)` di SQLite balikin NULL kalau salah satu argumen NULL (beda sama agregat MAX()); COALESCE di sini milih sisi yang non-NULL. Baris kontak yang lahir dari impor daftar tamu punya kolom ini NULL di awal.
  */
 export async function upsertKontak(
   env: Env,
@@ -35,7 +36,7 @@ export async function upsertKontak(
     `INSERT INTO kontak (nomor, nama, opt_out, terakhir_pesan_masuk, dibuat, diperbarui)
      VALUES (?, ?, 0, ?, ?, ?)
      ON CONFLICT(nomor) DO UPDATE SET
-       terakhir_pesan_masuk = MAX(excluded.terakhir_pesan_masuk, kontak.terakhir_pesan_masuk),
+       terakhir_pesan_masuk = COALESCE(MAX(excluded.terakhir_pesan_masuk, kontak.terakhir_pesan_masuk), excluded.terakhir_pesan_masuk, kontak.terakhir_pesan_masuk),
        diperbarui = excluded.diperbarui,
        -- jangan timpa nama yang sudah terisi dengan nilai kosong/null
        nama = CASE
@@ -69,13 +70,14 @@ export async function simpanPesan(env: Env, data: SimpanPesanInput): Promise<boo
  * bersamaan dari nomor yang sama akan bentrok di primary key kalau dipisah.
  * `MAX` dipakai karena webhook Meta bisa tiba tidak berurutan — jejak waktu
  * tidak boleh mundur.
+ * `MAX(x,y)` di SQLite balikin NULL kalau salah satu argumen NULL (beda sama agregat MAX()); COALESCE di sini milih sisi yang non-NULL. Baris percakapan yang lahir dari ambil-alih.ts (staf ambil alih sebelum ada pesan) punya kolom ini NULL di awal.
  */
 export async function statusPercakapan(env: Env, nomor: string, waktu: string): Promise<StatusAgent> {
   const baris = await env.DB.prepare(
     `INSERT INTO percakapan (nomor, status_agent, terakhir_pesan_pada)
      VALUES (?, 'aktif', ?)
      ON CONFLICT(nomor) DO UPDATE SET
-       terakhir_pesan_pada = MAX(excluded.terakhir_pesan_pada, percakapan.terakhir_pesan_pada)
+       terakhir_pesan_pada = COALESCE(MAX(excluded.terakhir_pesan_pada, percakapan.terakhir_pesan_pada), excluded.terakhir_pesan_pada, percakapan.terakhir_pesan_pada)
      RETURNING status_agent`,
   )
     .bind(nomor, waktu)
