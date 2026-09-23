@@ -11,6 +11,7 @@ const MACHINE_PATHS = new Set([
   '/api/balasan-agent',
   '/api/status-callback',
   '/api/campaign/progress-callback',
+  '/api/status-agent',
 ])
 
 const SECURITY_HEADERS: Record<string, string> = {
