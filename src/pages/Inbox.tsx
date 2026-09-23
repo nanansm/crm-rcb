@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import Pilih from '../komponen/Pilih'
 
 type RingkasPercakapan = {
   nomor: string
@@ -26,6 +27,8 @@ type Detail = {
   sisa_jendela_detik: number
   pesan: Pesan[]
 }
+
+type TemplateSiap = { nama: string; judul: string; isi: string; punya_gambar: boolean }
 
 const jam = new Intl.DateTimeFormat('id-ID', { hour: '2-digit', minute: '2-digit' })
 const tanggal = new Intl.DateTimeFormat('id-ID', { day: 'numeric', month: 'short' })
@@ -66,6 +69,10 @@ export default function Inbox() {
   const [galatBalas, setGalatBalas] = useState('')
   const [muatUlang, setMuatUlang] = useState(0)
   const [versiDaftar, setVersiDaftar] = useState(0)
+  const [daftarTemplate, setDaftarTemplate] = useState<TemplateSiap[] | null>(null)
+  const [galatTemplate, setGalatTemplate] = useState(false)
+  const [pilihTemplate, setPilihTemplate] = useState('')
+  const [infoTemplate, setInfoTemplate] = useState('')
   const kotakPesan = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
@@ -104,6 +111,43 @@ export default function Inbox() {
       batal = true
     }
   }, [dipilih, muatUlang])
+
+  useEffect(() => {
+    setPilihTemplate('')
+    setInfoTemplate('')
+    setDaftarTemplate(null)
+    setGalatTemplate(false)
+  }, [dipilih])
+
+  // Lazy-load: cuma ditarik begitu benar-benar dibutuhkan (jendela tutup,
+  // sudah diambil alih, tamu belum opt-out), bukan tiap percakapan dibuka.
+  useEffect(() => {
+    if (!detail) return
+    if (detail.kontak.opt_out) return
+    if (detail.percakapan.status_agent !== 'diambil_alih') return
+    if (detail.dalam_jendela) return
+    if (daftarTemplate !== null) return
+
+    let batal = false
+    fetch('/api/template')
+      .then((res) => {
+        if (!res.ok) throw new Error('gagal_muat_template')
+        return res.json() as Promise<{ template?: TemplateSiap[] }>
+      })
+      .then((body) => {
+        if (batal) return
+        setDaftarTemplate((body.template ?? []).filter((t) => !t.punya_gambar))
+      })
+      .catch(() => {
+        if (batal) return
+        setDaftarTemplate([])
+        setGalatTemplate(true)
+      })
+
+    return () => {
+      batal = true
+    }
+  }, [detail, daftarTemplate])
 
   // Layar ini satu-satunya jalan staf membalas tamu (nomor Cloud API, tanpa
   // WhatsApp Web) — harus hidup sendiri, tidak boleh nunggu staf klik.
@@ -195,6 +239,48 @@ export default function Inbox() {
       }
       setDraf('')
       segarkan()
+    } finally {
+      setSibuk(false)
+    }
+  }
+
+  async function kirimTemplateKeTamu() {
+    if (!dipilih || !pilihTemplate || sibuk) return
+    setSibuk(true)
+    setGalatBalas('')
+    setInfoTemplate('')
+    try {
+      const res = await fetch(`/api/percakapan/${encodeURIComponent(dipilih)}/kirim-template`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ template: pilihTemplate }),
+      })
+      if (!res.ok) {
+        const body = (await res.json().catch(() => null)) as { error?: string; pesan?: string } | null
+        const pesan =
+          body?.error === 'template_wajib_gambar'
+            ? 'Template ini butuh gambar. Kirim lewat halaman Broadcast.'
+            : body?.error === 'belum_diambil_alih'
+              ? 'Ambil alih dulu sebelum mengirim.'
+              : body?.error === 'opt_out'
+                ? 'Tamu menolak dihubungi.'
+                : body?.error === 'gagal_kirim'
+                  ? body.pesan === 'meta_belum_dikonfigurasi'
+                    ? 'Kredensial Meta belum dipasang.'
+                    : 'Template gagal dikirim. Belum ada yang tersimpan.'
+                  : body?.pesan || body?.error || 'Template gagal dikirim.'
+        setGalatBalas(pesan)
+        return
+      }
+      // res.json() sengaja TIDAK dipanggil di jalur sukses -- wamid tidak
+      // dipakai UI, dan body 200 yang gagal di-parse jangan sampai jatuh ke
+      // catch generik lalu bilang "belum ada yang tersimpan" padahal Meta
+      // sudah terima.
+      setPilihTemplate('')
+      setInfoTemplate('Template terkirim. Kolom balasan terbuka lagi begitu tamu membalas.')
+      segarkan()
+    } catch {
+      setGalatBalas('Template gagal dikirim. Belum ada yang tersimpan.')
     } finally {
       setSibuk(false)
     }
@@ -369,10 +455,55 @@ export default function Inbox() {
                     tamu tidak menerima dua jawaban.
                   </p>
                 ) : !detail.dalam_jendela ? (
-                  <p className="text-sm text-warn">
-                    Jendela 24 jam tutup. Teks bebas ditolak WhatsApp; percakapan hanya bisa dibuka
-                    lewat template.
-                  </p>
+                  <div className="space-y-2">
+                    <p className="text-sm text-warn">
+                      Jendela 24 jam tutup. Teks bebas ditolak WhatsApp. Kirim template untuk membuka
+                      percakapan lagi.
+                    </p>
+                    {infoTemplate ? <p className="text-sm text-ok">{infoTemplate}</p> : null}
+                    {daftarTemplate === null ? (
+                      <p className="text-xs text-ink-soft">Memuat template…</p>
+                    ) : galatTemplate ? (
+                      <p className="text-sm text-bad">
+                        Daftar template gagal dimuat. Coba muat ulang halaman.
+                      </p>
+                    ) : daftarTemplate.length === 0 ? (
+                      <p className="text-sm text-ink-soft" data-testid="template-kosong">
+                        Belum ada template siap kirim (disetujui, tanpa variabel, tanpa gambar). Template
+                        bergambar dikirim lewat halaman Broadcast.
+                      </p>
+                    ) : (
+                      <div className="space-y-1">
+                        <div className="flex items-end gap-2">
+                          <Pilih
+                            id="template-inbox"
+                            nilai={pilihTemplate}
+                            opsi={daftarTemplate.map((t) => ({
+                              nilai: t.nama,
+                              label: t.judul || t.nama,
+                              catatan: t.isi ? t.isi.slice(0, 60) : undefined,
+                            }))}
+                            onPilih={setPilihTemplate}
+                            placeholder="Pilih template"
+                          />
+                          <button
+                            type="button"
+                            disabled={sibuk || !pilihTemplate}
+                            onClick={kirimTemplateKeTamu}
+                            data-testid="tombol-kirim-template"
+                            className="tombol tombol-utama shrink-0"
+                          >
+                            Kirim Template
+                          </button>
+                        </div>
+                        {pilihTemplate ? (
+                          <p className="whitespace-pre-wrap text-xs text-ink-soft">
+                            {daftarTemplate.find((t) => t.nama === pilihTemplate)?.isi ?? ''}
+                          </p>
+                        ) : null}
+                      </div>
+                    )}
+                  </div>
                 ) : (
                   <div className="space-y-1">
                     <div className="flex items-end gap-2">
