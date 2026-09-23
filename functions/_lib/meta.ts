@@ -80,6 +80,61 @@ export async function kirimTeks(env: Env, data: { ke: string; teks: string }): P
 }
 
 /**
+ * Kirim pesan template (dipakai buka ulang jendela 24 jam yang tutup). Template
+ * tanpa variabel dan tanpa header gambar -- payload sengaja tanpa `components`.
+ */
+export async function kirimTemplate(
+  env: Env,
+  data: { ke: string; nama: string; bahasa: string },
+): Promise<HasilKirim> {
+  if (!env.META_TOKEN || !env.META_PHONE_ID) {
+    return { ok: false, kode: null, pesan: 'meta_belum_dikonfigurasi' }
+  }
+
+  let res: Response
+  try {
+    res = await fetch(`https://graph.facebook.com/${VERSI}/${env.META_PHONE_ID}/messages`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${env.META_TOKEN}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        messaging_product: 'whatsapp',
+        to: data.ke,
+        type: 'template',
+        template: { name: data.nama, language: { code: data.bahasa } },
+      }),
+      signal: AbortSignal.timeout(10_000),
+    })
+  } catch {
+    return { ok: false, kode: null, pesan: 'gagal_menghubungi_meta' }
+  }
+
+  const teks = await res.text()
+  let terurai: unknown = null
+  try {
+    terurai = teks ? JSON.parse(teks) : null
+  } catch {
+    // biarkan null -- ditangani lewat status HTTP di bawah
+  }
+
+  if (!res.ok) {
+    const err = (terurai as ResponMetaGagal | null)?.error
+    return {
+      ok: false,
+      kode: err?.code ?? res.status,
+      pesan: err?.message ? samarkanNomor(err.message) : 'meta_menolak_pesan',
+    }
+  }
+
+  const wamid = (terurai as ResponMetaSukses | null)?.messages?.[0]?.id
+  if (!wamid) return { ok: false, kode: null, pesan: 'meta_tidak_mengembalikan_wamid' }
+
+  return { ok: true, wamid }
+}
+
+/**
  * Fungsi analitik Meta (dashboard) -- pola disalin dari bc-ksa/functions/_lib/meta.ts.
  * Kredensial di sini opsional (lokal sengaja kosong), jadi setiap fungsi mengecek
  * lebih dulu dan pulang `ok: false` tanpa pernah melempar exception.
